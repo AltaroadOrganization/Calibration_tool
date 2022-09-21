@@ -68,6 +68,7 @@ def show():
     st.write("Cet outil permet de sauver un timestamp de passage de calibration dans S3")
 
     st.subheader("Utilisateur")
+    calibration_passage_dict["client_name"]=st.text_input("Nom du client","")
     calibration_passage_dict["user_name"]=st.text_input("Nom d'utilisateur","")
     calibration_passage_dict["user_comments"]=st.text_input("Commentaires (trajectoire...)","")
 
@@ -88,6 +89,7 @@ if __name__ == "__main__":
 
     initial_passage_dict = {
             "user_name": "",
+            "client_name":"",
             "truck_mass": 0,
             "truck_plate": "unknown",
             "user_comments": "",
