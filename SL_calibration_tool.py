@@ -14,22 +14,31 @@ import boto3
 ACCESS_KEY = st.secrets["my_access_key"]["ACCESS_KEY"]
 SECRET_KEY = st.secrets["my_access_key"]["SECRET_KEY"]
 
-
 #function to load the dict to a S3 bucket
 def read_write_S3(bucket_name, the_dict, access_key, secret_key):
     '''
     this function adds a "new simulator user file" to a bucket
     '''
-    session = boto3.Session(aws_access_key_id=access_key, aws_secret_access_key=secret_key)
-    s3 = session.resource('s3')
-    heure=the_dict['date_heure'].replace('/','_').replace(' ','_')
-    object = s3.Object(bucket_name, 'calibration_tool/calibration_userfile_{}.txt'.format(heure))
-    #df=pd.DataFrame.from_dict(the_dict)
-    result = object.put(Body=str(the_dict))
+    try:
+        session = boto3.Session(aws_access_key_id=access_key, aws_secret_access_key=secret_key)
+        s3 = session.resource('s3')
+        now = datetime.datetime.utcnow()
+        result = now + datetime.timedelta(hours=2)
+        date_heure = result.strftime("%d/%m/%Y %H:%M:%S")
+        the_dict["date_heure"]=date_heure
+        the_dict["timestamp"]=int(datetime.datetime.timestamp(now)+3600*2)
+        object = s3.Object(bucket_name, 'calibration_tool/calibration_userfile_{}.txt'.format(str(the_dict["timestamp"])))
+        #df=pd.DataFrame.from_dict(the_dict)
+        result = object.put(Body=str(the_dict))
+        the_dict["pushed_state"]=True
+        return the_dict
+    except Exception as e:
+        st.write("Erreur de sauvegarde sur S3")
+        return the_dict
 
 def show():
     #all the inputs and outputs are saved in a dict
-    simulator_dict={}
+    calibration_passage_dict={}
 
     Image_title=Image.open("Banner_Linkedin.png")
     st.image(Image_title)
@@ -42,7 +51,7 @@ def show():
     date = result.strftime("%d/%m/%Y")
     heure = result.strftime("%H:%M:%S")
     st.caption("début de session - Date et heure : {}".format(date_heure))
-    simulator_dict['date_heure']=date_heure
+    bucket_name = 'dataset-altaroad-public'
 
     with col1:
         original_title = '''
@@ -58,36 +67,36 @@ def show():
     st.write("")
     st.write("Cet outil permet de sauver un timestamp de passage de calibration dans S3")
 
+    st.subheader("Utilisateur")
+    calibration_passage_dict["user_name"]=st.text_input("Nom d'utilisateur","")
+    calibration_passage_dict["user_comments"]=st.text_input("Commentaires (trajectoire...)","")
+
+    st.subheader("Passage")
+    calibration_passage_dict["truck_plate"]=st.text_input("Plaque immatriculation Camion","XX111YY")
+    calibration_passage_dict["truck_mass"]=st.text_input("Masse (kg)","000000")
+    calibration_passage_dict["truck_speed"]=st.text_input("Vitesse (km/h)","000")
+    calibration_passage_dict["numero_passage"]=st.text_input("Numéro de passage","1")
+
+
+    if st.button(label="Pousser sur S3"):
+        read_write_S3(bucket_name, calibration_passage_dict, ACCESS_KEY, SECRET_KEY)
+        st.write(calibration_passage_dict)
+
+    return calibration_passage_dict
+
 if __name__ == "__main__":
 
     initial_passage_dict = {
-            "name_user": "",
+            "user_name": "",
             "truck_mass": 0,
-            "passage_speed":0,
             "truck_plate": "unknown",
             "user_comments": "",
             "truck_speed":0,
             "numero_passage":0,
-            "pushed_state":False
-        }
-
-    #gestion de session state
-    for my_key in initial_passage_dict.keys():
-        if my_key not in st.session_state:
-            st.session_state[my_key] = initial_dict[my_key]
+            "pushed_state":False,
+            "date_heure":"",
+            "timestamp":""
+            }
 
     calibration_passage_dict=show()
-
-    #gestion de session state
-    for my_key in initial_passage_dict.keys():
-        if my_key not in st.session_state:
-            st.session_state[my_key] = initial_passage_dict[my_key]
-        else:
-            try:
-                st.session_state[my_key]=calibration_passage_dict[my_key]
-            except:
-                st.session_state[my_key] = initial_passage_dict[my_key]
-
-    if "pushed_state" not in st.session_state:
-        st.session_state.pushed_state = False
 
