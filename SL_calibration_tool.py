@@ -9,13 +9,18 @@ import random
 import datetime
 import re
 import boto3
+#import cv2
+from PIL import Image
+import numpy as np
+import io
+import os
 
 #get AWS access key and secret key
 ACCESS_KEY = st.secrets["my_access_key"]["ACCESS_KEY"]
 SECRET_KEY = st.secrets["my_access_key"]["SECRET_KEY"]
 
 #function to load the dict to a S3 bucket
-def read_write_S3(bucket_name, the_dict, access_key, secret_key):
+def read_write_S3(bucket_name, the_dict, timestamp_image, access_key, secret_key):
     '''
     this function adds a "new simulator user file" to a bucket
     '''
@@ -25,12 +30,25 @@ def read_write_S3(bucket_name, the_dict, access_key, secret_key):
         now = datetime.datetime.utcnow()
         result = now + datetime.timedelta(hours=2)
         date_heure = result.strftime("%d/%m/%Y %H:%M:%S")
+
+        #save the dict
         the_dict["date_heure"]=date_heure
         the_dict["timestamp"]=int(datetime.datetime.timestamp(now)+3600*2)
         object = s3.Object(bucket_name, 'calibration_tool/calibration_userfile_{}.txt'.format(str(the_dict["timestamp"])))
         #df=pd.DataFrame.from_dict(the_dict)
         result = object.put(Body=str(the_dict))
         the_dict["pushed_state"]=True
+
+        #save the image
+        if timestamp_image!='empty':
+            file_name='./passage_image_{}.jpg'.format(timestamp_image)
+            key_name='calibration_tool/passage_image_{}.jpg'.format(str(the_dict["timestamp"]))
+            s3=session.client("s3")
+            s3.upload_file(file_name, bucket_name, key_name)
+            the_dict["has_image"] = True
+        else:
+            the_dict["has_image"] = False
+            pass
         return the_dict
     except Exception as e:
         st.write("Erreur de sauvegarde sur S3")
@@ -78,12 +96,26 @@ def show():
     calibration_passage_dict["truck_speed"]=st.text_input("Vitesse (km/h)","000")
     calibration_passage_dict["numero_passage"]=st.text_input("Numéro de passage","1")
 
+    #take an image
+    img_file_buffer = st.camera_input("Take a picture")
+
+    if img_file_buffer is not None:
+        timestamp_image=int(datetime.datetime.timestamp(now) + 3600 * 2)
+        timestamp_image='1'
+        # To read image file buffer with OpenCV:
+        img = Image.open(img_file_buffer)
+        # save the image
+        img.convert('RGB')
+        img.save('./passage_image_{}.jpg'.format(timestamp_image))
+    else:
+        img=np.array([])
+        timestamp_image='empty'
 
     if st.button(label="Pousser sur S3"):
-        read_write_S3(bucket_name, calibration_passage_dict, ACCESS_KEY, SECRET_KEY)
+        read_write_S3(bucket_name, calibration_passage_dict, timestamp_image, ACCESS_KEY, SECRET_KEY)
         st.write(calibration_passage_dict)
 
-    return calibration_passage_dict
+    return calibration_passage_dict, img
 
 if __name__ == "__main__":
 
@@ -97,8 +129,9 @@ if __name__ == "__main__":
             "numero_passage":0,
             "pushed_state":False,
             "date_heure":"",
-            "timestamp":""
+            "timestamp":"",
+            "has_image":False
             }
 
-    calibration_passage_dict=show()
+    calibration_passage_dict, img=show()
 
